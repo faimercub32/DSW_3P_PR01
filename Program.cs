@@ -1,5 +1,7 @@
+using DSW_3P_PR01.Persistence;
 using DSW_3P_PR01.Repositories;
 using DSW_3P_PR01.Services;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
@@ -12,10 +14,21 @@ builder.Services.AddOpenApi("v1", options =>
         return Task.CompletedTask;
     });
 });
-builder.Services.AddSingleton<IEventoRepository, EventoJsonRepository>();
+var conexion = builder.Configuration.GetConnectionString("Eventos")
+    ?? throw new InvalidOperationException("Falta la cadena de conexión Eventos.");
+builder.Services.AddDbContext<EventosDbContext>(options => options.UseSqlServer(conexion));
+builder.Services.AddScoped<IEventoRepository, EventoSqlRepository>();
 builder.Services.AddScoped<IEventoService, EventoService>();
 
 var app = builder.Build();
+if (args is ["--importar-json", var ruta])
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<EventosDbContext>();
+    var total = await ImportadorEventosJson.ImportarAsync(db, ruta);
+    Console.WriteLine($"Eventos importados: {total}");
+    return;
+}
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
